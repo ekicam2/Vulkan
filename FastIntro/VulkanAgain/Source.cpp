@@ -24,8 +24,11 @@ void assert(bool condition, const char* msg) {
 
 }
 
-SDL_Window* window;
-VkInstance  instance;
+// some global variables
+SDL_Window*     window      = nullptr;
+VkInstance      instance    = nullptr;
+VkDevice        device      = nullptr;
+VkQueue         queue       = nullptr;
 
 // space for vulkan dynamic module and functions
 HMODULE vulkanModule = VK_NULL_HANDLE;
@@ -36,7 +39,7 @@ PFN_vkCreateInstance                            vkCreateInstance                
 PFN_vkEnumerateInstanceExtensionProperties      vkEnumerateInstanceExtensionProperties    = nullptr;
 PFN_vkEnumerateInstanceLayerProperties          vkEnumerateInstanceLayerProperties        = nullptr;
 
-// vlGetInstanceProcAddr(vkInstance)
+// vkGetInstanceProcAddr(vkInstance)
 PFN_vkDestroyInstance                           vkDestroyInstance                         = nullptr;
 PFN_vkEnumeratePhysicalDevices                  vkEnumeratePhysicalDevices                = nullptr;
 PFN_vkGetPhysicalDeviceProperties               vkGetPhysicalDeviceProperties             = nullptr;
@@ -46,6 +49,10 @@ PFN_vkCreateDevice                              vkCreateDevice                  
 PFN_vkGetDeviceProcAddr                         vkGetDeviceProcAddr                       = nullptr;
 PFN_vkEnumerateDeviceExtensionProperties        vkEnumerateDeviceExtensionProperties      = nullptr;
 
+// vkGetDeviceProcAddr(vkDevice)
+PFN_vkGetDeviceQueue                            vkGetDeviceQueue                          = nullptr;
+PFN_vkDestroyDevice                             vkDestroyDevice                           = nullptr;
+PFN_vkDeviceWaitIdle                            vkDeviceWaitIdle                          = nullptr;
 
 int main(int argc, char* argv[]) {
 
@@ -98,7 +105,7 @@ int main(int argc, char* argv[]) {
     vkDestroyInstance = (PFN_vkDestroyInstance) vkGetInstanceProcAddr(instance, "vkDestroyInstance");
     assert(vkDestroyInstance, "Load vkDestroyInstance");
 
-    vkEnumeratePhysicalDevices = (PFN_vkEnumeratePhysicalDevices) vkGetInstanceProcAddr(instance, "vkEnumeratePhysicalDevices");
+    vkEnumeratePhysicalDevices  = (PFN_vkEnumeratePhysicalDevices) vkGetInstanceProcAddr(instance, "vkEnumeratePhysicalDevices");
     assert(vkEnumeratePhysicalDevices, "Load vkEnumeratePhysicalDevices");
 
     vkGetPhysicalDeviceProperties = (PFN_vkGetPhysicalDeviceProperties) vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceProperties");
@@ -143,7 +150,7 @@ int main(int argc, char* argv[]) {
     uint32_t minorVersion = VK_VERSION_MINOR(deviceProperties.apiVersion);
     uint32_t patchVersion = VK_VERSION_PATCH(deviceProperties.apiVersion);
 
-    assert(majorVersion >= 1 && deviceProperties.limits.maxImageDimension2D >= 4096, "Physical device does not support required parameters!");
+    assert(majorVersion >= 1, "Physical device does not support required parameters!");
 
     uint32_t queueFamiliesNum = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(physicalDevices[0], &queueFamiliesNum, nullptr);
@@ -162,11 +169,55 @@ int main(int argc, char* argv[]) {
     }
     assert(queueFamilyIndex != -1, "Device does not support reuired queue families");
 
+    vector<float> queuePriorities = { 1.0f };
 
+    VkDeviceQueueCreateInfo deviceQueueCreateInfo = {};
+    deviceQueueCreateInfo.sType             = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    deviceQueueCreateInfo.pNext             = nullptr;
+    deviceQueueCreateInfo.flags             = 0;
+    deviceQueueCreateInfo.queueFamilyIndex  = queueFamilyIndex;
+    deviceQueueCreateInfo.queueCount        = queuePriorities.size();
+    deviceQueueCreateInfo.pQueuePriorities  = &queuePriorities[0];
 
+    VkDeviceCreateInfo deviceCreateInfo = {
+    VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        nullptr,
+        0,
+        1,
+        &deviceQueueCreateInfo,
+        0,
+        nullptr,
+        0,
+        nullptr,
+        nullptr
+    };
+    
+    result = vkCreateDevice(physicalDevices[0], &deviceCreateInfo, nullptr, &device);
+    assert(result == VK_SUCCESS, "Call vkCreateDevice");
+
+    // once we have a logical device we can load functions
+    // WARNING! functions loaded by vkGetDeviceProcAddr can be used only with device that were called by!
+    vkGetDeviceQueue = (PFN_vkGetDeviceQueue) vkGetDeviceProcAddr(device, "vkGetDeviceQueue");
+    assert(vkGetDeviceQueue, "vkGetDeviceQueue");
+
+    vkDestroyDevice = (PFN_vkDestroyDevice) vkGetDeviceProcAddr(device, "vkDestroyDevice");
+    assert(vkDestroyDevice, "vkDestroyDevice");
+
+    vkDeviceWaitIdle = (PFN_vkDeviceWaitIdle) vkGetDeviceProcAddr(device, "vkDeviceWaitIdle");
+    assert(vkDeviceWaitIdle, "vkDeviceWaitIdle");
+
+    vkGetDeviceQueue(device, queueFamilyIndex, 0, &queue);
+    assert(queue != nullptr, "call vkGetDeviceQueue");
+    
     SDL_Delay(5000);
 
+    vkDeviceWaitIdle(device);
+    vkDestroyDevice(device, nullptr);
+
     vkDestroyInstance(instance, nullptr);
+
+    FreeLibrary(vulkanModule);
+
     SDL_Quit();
 
     return 0;
