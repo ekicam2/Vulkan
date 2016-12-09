@@ -18,7 +18,7 @@ void assert(bool condition, const char* msg) {
         OutputDebugString("ASSERT: ");
         OutputDebugString(msg);
         OutputDebugString("\n");
-        int *breaker = 0;
+        int* breaker = 0;
         *breaker = 1;
     }
 
@@ -33,26 +33,35 @@ VkQueue         queue       = nullptr;
 // space for vulkan dynamic module and functions
 HMODULE vulkanModule = VK_NULL_HANDLE;
 
+// GetProcAddr(vulkanModule)
+PFN_vkGetInstanceProcAddr                       vkGetInstanceProcAddr                       = nullptr;
+
 // vkGetInstanceProcAddr(nullptr)
-PFN_vkGetInstanceProcAddr                       vkGetInstanceProcAddr                     = nullptr;
-PFN_vkCreateInstance                            vkCreateInstance                          = nullptr;
-PFN_vkEnumerateInstanceExtensionProperties      vkEnumerateInstanceExtensionProperties    = nullptr;
-PFN_vkEnumerateInstanceLayerProperties          vkEnumerateInstanceLayerProperties        = nullptr;
+PFN_vkCreateInstance                            vkCreateInstance                            = nullptr;
+PFN_vkEnumerateInstanceExtensionProperties      vkEnumerateInstanceExtensionProperties      = nullptr;
+PFN_vkEnumerateInstanceLayerProperties          vkEnumerateInstanceLayerProperties          = nullptr;
 
 // vkGetInstanceProcAddr(vkInstance)
-PFN_vkDestroyInstance                           vkDestroyInstance                         = nullptr;
-PFN_vkEnumeratePhysicalDevices                  vkEnumeratePhysicalDevices                = nullptr;
-PFN_vkGetPhysicalDeviceProperties               vkGetPhysicalDeviceProperties             = nullptr;
-PFN_vkGetPhysicalDeviceFeatures                 vkGetPhysicalDeviceFeatures               = nullptr;
-PFN_vkGetPhysicalDeviceQueueFamilyProperties    vkGetPhysicalDeviceQueueFamilyProperties  = nullptr;
-PFN_vkCreateDevice                              vkCreateDevice                            = nullptr;
-PFN_vkGetDeviceProcAddr                         vkGetDeviceProcAddr                       = nullptr;
-PFN_vkEnumerateDeviceExtensionProperties        vkEnumerateDeviceExtensionProperties      = nullptr;
+PFN_vkDestroyInstance                           vkDestroyInstance                           = nullptr;
+PFN_vkEnumeratePhysicalDevices                  vkEnumeratePhysicalDevices                  = nullptr;
+PFN_vkGetPhysicalDeviceProperties               vkGetPhysicalDeviceProperties               = nullptr;
+PFN_vkGetPhysicalDeviceFeatures                 vkGetPhysicalDeviceFeatures                 = nullptr;
+PFN_vkGetPhysicalDeviceQueueFamilyProperties    vkGetPhysicalDeviceQueueFamilyProperties    = nullptr;
+PFN_vkCreateDevice                              vkCreateDevice                              = nullptr;
+PFN_vkGetDeviceProcAddr                         vkGetDeviceProcAddr                         = nullptr;
+PFN_vkEnumerateDeviceExtensionProperties        vkEnumerateDeviceExtensionProperties        = nullptr;
+PFN_vkGetPhysicalDeviceSurfaceSupportKHR        vkGetPhysicalDeviceSurfaceSupportKHR        = nullptr;
+PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR   vkGetPhysicalDeviceSurfaceCapabilitiesKHR   = nullptr;
+PFN_vkGetPhysicalDeviceSurfaceFormatsKHR        vkGetPhysicalDeviceSurfaceFormatsKHR        = nullptr;
+PFN_vkGetPhysicalDeviceSurfacePresentModesKHR   vkGetPhysicalDeviceSurfacePresentModesKHR   = nullptr;
+PFN_vkDestroySurfaceKHR                         vkDestroySurfaceKHR                         = nullptr;
+PFN_vkCreateWin32SurfaceKHR                     vkCreateWin32SurfaceKHR                     = nullptr;
+PFN_vkGetPhysicalDeviceMemoryProperties         vkGetPhysicalDeviceMemoryProperties         = nullptr;
 
 // vkGetDeviceProcAddr(vkDevice)
-PFN_vkGetDeviceQueue                            vkGetDeviceQueue                          = nullptr;
-PFN_vkDestroyDevice                             vkDestroyDevice                           = nullptr;
-PFN_vkDeviceWaitIdle                            vkDeviceWaitIdle                          = nullptr;
+PFN_vkGetDeviceQueue                            vkGetDeviceQueue                            = nullptr;
+PFN_vkDestroyDevice                             vkDestroyDevice                             = nullptr;
+PFN_vkDeviceWaitIdle                            vkDeviceWaitIdle                            = nullptr;
 
 int main(int argc, char* argv[]) {
 
@@ -79,26 +88,51 @@ int main(int argc, char* argv[]) {
     assert(vkEnumerateInstanceExtensionProperties, "Load vkEnumerateInstanceExtensionProperties");
 
     vkEnumerateInstanceLayerProperties = (PFN_vkEnumerateInstanceLayerProperties) vkGetInstanceProcAddr(nullptr, "vkEnumerateInstanceLayerProperties");
+    assert(vkEnumerateInstanceLayerProperties, "Load vkEnumerateInstanceLayerProperties");
+
+    uint32_t extensionsNum = 0;
+    VkResult result = vkEnumerateInstanceExtensionProperties(nullptr, &extensionsNum, nullptr);
+    assert(result == VK_SUCCESS || extensionsNum == 0, "Call count vkEnumerateInstanceExtensionProperties");
+
+    vector<VkExtensionProperties> extensionProperties(extensionsNum);
+    result = vkEnumerateInstanceExtensionProperties(nullptr, &extensionsNum, &extensionProperties[0]);
+    assert(result == VK_SUCCESS, "Call list vkEnumerateInstanceExtensionProperties");
+
+    vector<const char*> extensions = {
+        VK_KHR_SURFACE_EXTENSION_NAME,
+        VK_KHR_WIN32_SURFACE_EXTENSION_NAME
+    };
+
+    uint32_t counter = 0;
+    for (uint32_t i = 0; i < extensions.size(); ++i) {
+        for (uint32_t j = 0; j < extensionProperties.size(); ++j) {
+            if (strcmp(extensions[i], extensionProperties[j].extensionName) == 0) {
+                ++counter;
+            }
+        }
+    }
+    assert(counter == extensions.size(), "Can not find required extensions");
+
 
     VkApplicationInfo vkAppInfo = {};
-    vkAppInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    vkAppInfo.apiVersion = VK_MAKE_VERSION(1, 0, 0);
-    vkAppInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    vkAppInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    vkAppInfo.pApplicationName = "Vulkan tutorial";
-    vkAppInfo.pNext = nullptr;
+    vkAppInfo.sType                 = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    vkAppInfo.apiVersion            = VK_MAKE_VERSION(1, 0, 0);
+    vkAppInfo.applicationVersion    = VK_MAKE_VERSION(1, 0, 0);
+    vkAppInfo.engineVersion         = VK_MAKE_VERSION(1, 0, 0);
+    vkAppInfo.pApplicationName      = "Vulkan tutorial";
+    vkAppInfo.pNext                 = nullptr;
 
     VkInstanceCreateInfo vkInstanceCreateInfo = {};
-    vkInstanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    vkInstanceCreateInfo.enabledLayerCount = 0;
-    vkInstanceCreateInfo.ppEnabledLayerNames = nullptr;
-    vkInstanceCreateInfo.enabledExtensionCount = 0;
-    vkInstanceCreateInfo.ppEnabledExtensionNames = nullptr;
-    vkInstanceCreateInfo.pApplicationInfo = &vkAppInfo;
-    vkInstanceCreateInfo.pNext = nullptr;
+    vkInstanceCreateInfo.sType                      = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    vkInstanceCreateInfo.enabledLayerCount          = 0;
+    vkInstanceCreateInfo.ppEnabledLayerNames        = nullptr;
+    vkInstanceCreateInfo.enabledExtensionCount      = counter;
+    vkInstanceCreateInfo.ppEnabledExtensionNames    = &extensions[0];
+    vkInstanceCreateInfo.pApplicationInfo           = &vkAppInfo;
+    vkInstanceCreateInfo.pNext                      = nullptr;
 
     // vulkan Instance creation
-    VkResult result = vkCreateInstance(&vkInstanceCreateInfo, nullptr, &instance);
+    result = vkCreateInstance(&vkInstanceCreateInfo, nullptr, &instance);
     assert(result == VK_SUCCESS, "Call vkCreateInstance");
 
     // once we have an instance we can load rest of needed functions
@@ -126,6 +160,26 @@ int main(int argc, char* argv[]) {
     vkEnumerateDeviceExtensionProperties = (PFN_vkEnumerateDeviceExtensionProperties) vkGetInstanceProcAddr(instance, "vkEnumerateDeviceExtensionProperties");
     assert(vkEnumerateDeviceExtensionProperties, "Load vkEnumerateDeviceExtensionProperties");
 
+    vkGetPhysicalDeviceSurfaceSupportKHR = (PFN_vkGetPhysicalDeviceSurfaceSupportKHR)vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceSurfaceSupportKHR");
+    assert(vkGetPhysicalDeviceSurfaceSupportKHR, "Load vkGetPhysicalDeviceSurfaceSupportKHR");
+
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR = (PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR)vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
+    assert(vkGetPhysicalDeviceSurfaceCapabilitiesKHR, "Load vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
+
+    vkGetPhysicalDeviceSurfaceFormatsKHR = (PFN_vkGetPhysicalDeviceSurfaceFormatsKHR)vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceSurfaceFormatsKHR");
+    assert(vkGetPhysicalDeviceSurfaceFormatsKHR, "Load vkGetPhysicalDeviceSurfaceFormatsKHR");
+
+    vkGetPhysicalDeviceSurfacePresentModesKHR = (PFN_vkGetPhysicalDeviceSurfacePresentModesKHR)vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceSurfacePresentModesKHR");
+    assert(vkGetPhysicalDeviceSurfacePresentModesKHR, "Load vkGetPhysicalDeviceSurfacePresentModesKHR");
+
+    vkDestroySurfaceKHR = (PFN_vkDestroySurfaceKHR)vkGetInstanceProcAddr(instance, "vkDestroySurfaceKHR");
+    assert(vkDestroySurfaceKHR, "Load vkDestroySurfaceKHR");
+
+    vkCreateWin32SurfaceKHR = (PFN_vkCreateWin32SurfaceKHR)vkGetInstanceProcAddr(instance, "vkCreateWin32SurfaceKHR");
+    assert(vkCreateWin32SurfaceKHR, "Load vkCreateWin32SurfaceKHR");
+
+    vkGetPhysicalDeviceMemoryProperties = (PFN_vkGetPhysicalDeviceMemoryProperties)vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceMemoryProperties");
+    assert(vkGetPhysicalDeviceMemoryProperties, "Laod vkGetPhysicalDeviceMemoryProperties");
 
     // count all available GPU's
     uint32_t deviceNum = 0;
