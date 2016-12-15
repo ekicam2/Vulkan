@@ -207,13 +207,14 @@ int main(int argc, char* argv[]) {
 
     // after we initialize instance we can create a presentation surface
     SDL_SysWMinfo wmInfo;
+    SDL_VERSION(&wmInfo.version);
     SDL_GetWindowWMInfo(window, &wmInfo);
 
     VkWin32SurfaceCreateInfoKHR createSurfaceInfo = {};
     createSurfaceInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
     createSurfaceInfo.pNext = nullptr;
     createSurfaceInfo.flags = 0;
-    createSurfaceInfo.hinstance = GetModuleHandle(NULL); //untill there is no SDL 2.0.6 released it has to stay as that
+    createSurfaceInfo.hinstance = GetModuleHandle(0);//GetModuleHandle(NULL); //untill there is no SDL 2.0.6 released it has to stay as that
     createSurfaceInfo.hwnd = wmInfo.info.win.window;
 
     result = vkCreateWin32SurfaceKHR(instance, &createSurfaceInfo, nullptr, &surface);
@@ -430,6 +431,7 @@ int main(int argc, char* argv[]) {
     vkGetDeviceQueue(device, presentQueueFamilyIndex, 0, &presentationQueue);
     assert(presentationQueue, "Call vkGetDeviceQueue presentation");
 
+    // semaphore will help us to communicate with CPU and help improve speed
     VkSemaphoreCreateInfo semaphoreCreateInfo = {};
     semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     semaphoreCreateInfo.pNext = nullptr;
@@ -442,7 +444,32 @@ int main(int argc, char* argv[]) {
     assert(result == VK_SUCCESS, "Couldn't create a Semaphore");
 
     VkSurfaceCapabilitiesKHR surfaceCapabilities;
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevices[selectedPhysicalDeviceIndex], surface, &surfaceCapabilities);
+    result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevices[selectedPhysicalDeviceIndex], surface, &surfaceCapabilities);
+    OutputDebugString("test");
+    assert(result == VK_SUCCESS, "Couldn't check presentation surface capabilities");
+
+    // format contains information about color format and color space smething like: R8G8B8, non linear srgb
+    uint32_t surfaceFormatsNum;
+    result = vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevices[selectedPhysicalDeviceIndex], surface, &surfaceFormatsNum, nullptr);
+    assert(result == VK_SUCCESS, "couldn't count presentation surface formats");
+
+    vector<VkSurfaceFormatKHR> surfaceFormats(surfaceFormatsNum);
+    result = vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevices[selectedPhysicalDeviceIndex], surface, &surfaceFormatsNum, &surfaceFormats[0]);
+    assert(result == VK_SUCCESS, "couldn't enumerate presentation surface formats");
+
+    // it's kind of recipe how to display our swapchain images on the screen (v-sync or immediately)
+    uint32_t presentationModesNum = 0;
+    result = vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevices[selectedPhysicalDeviceIndex], surface, &presentationModesNum, nullptr);
+    assert(result == VK_SUCCESS, "couldn't count supported presentation modes");
+
+    vector<VkPresentModeKHR> presentationModes(presentationModesNum);
+    result = vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevices[selectedPhysicalDeviceIndex], surface, &presentationModesNum, &presentationModes[0]);
+    assert(result == VK_SUCCESS, "couldn't enumerate supported presentation modes");
+
+    // swap chain image is kinda frame buffer from OGL
+    // and because I'm lazy, greedy and don't know how I will use this in the future I will just set it to the maximum ;)
+    uint32_t scImagesNum = 0;
+    surfaceCapabilities.maxImageCount;
 
     SDL_Delay(5000);
 
